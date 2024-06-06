@@ -3,7 +3,8 @@ import pygame
 import time
 import re
 
-UDP_IP = "127.0.0.1"
+# UDP_IP = "127.0.0.1"
+UDP_IP = "0.0.0.0"
 UDP_PORT = 5005
 MESSAGE = b"Hello, World!"
 
@@ -24,6 +25,8 @@ class GameServer():
         self.player_socks = [None] * len(player_ids)
         self.sock.bind(addr)
         self.reset()
+        
+        self.last_act = [None] * len(player_ids)
 
     def _wait_player(self,):
         while None in self.player_addresses:
@@ -75,16 +78,19 @@ class GameServer():
             return
 
         for i, act in enumerate(actions):
-            if act == 0:
-                # no action
-                data = "[DATA]0".encode("utf-8")
-            elif act == 1:
-                # move forward
-                data = "[DATA]1".encode("utf-8")
-            # elif act == -1:
-                # check alive
-            print("send to", self.player_addresses[i], data)
-            self.sock.sendto(data, self.player_addresses[i])
+            if act != self.last_act[i]:
+                # seed only when state changed
+                self.last_act[i] = act
+                if act == 0:
+                    # no action
+                    data = "[DATA]0".encode("utf-8")
+                elif act == 1:
+                    # move forward
+                    data = "[DATA]1".encode("utf-8")
+                # elif act == -1:
+                    # check alive
+                print("send to", self.player_addresses[i], data)
+                self.sock.sendto(data, self.player_addresses[i])
         
 
 
@@ -105,7 +111,7 @@ if __name__ == '__main__':
                 running = False
 
         # Check every 100ms
-        time.sleep(0.1)
+        time.sleep(0.001)
 
         # Check if 'A' key is pressed
         keys = pygame.key.get_pressed()
