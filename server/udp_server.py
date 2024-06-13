@@ -81,12 +81,19 @@ class GameServer():
             if act != self.last_act[i]:
                 # seed only when state changed
                 self.last_act[i] = act
-                if act == 0:
-                    # no action
-                    data = "[DATA]0".encode("utf-8")
-                elif act == 1:
-                    # move forward
-                    data = "[DATA]1".encode("utf-8")
+                data = f"[DATA]".encode("utf-8")
+                # for a in act:
+                for j in range(4):
+                    a = act[j]
+                    a = min(a, 255)
+                    a = max(a, -255)
+                    data = data + int(a).to_bytes(2, byteorder='little', signed=True)
+                # if act == 0:
+                #     # no action
+                #     data = "[DATA]0".encode("utf-8")
+                # elif act == 1:
+                #     # move forward
+                #     data = "[DATA]1".encode("utf-8")
                 # elif act == -1:
                     # check alive
                 print("send to", self.player_addresses[i], data)
@@ -115,12 +122,30 @@ if __name__ == '__main__':
 
         # Check if 'A' key is pressed
         keys = pygame.key.get_pressed()
-        if keys[pygame.K_a]:
+        if keys[pygame.K_w]:
             # sock.sendto(MESSAGE, (UDP_IP, UDP_PORT))
-            server.step([1,])
+            # server.step([(255, 255, 255, 255),])
+            l, r = 255, 255
+        elif keys[pygame.K_s]:
+            # sock.sendto(MESSAGE, (UDP_IP, UDP_PORT))
+            # server.step([(l, r, l, r),])
+            l, r = -255, -255
+        elif keys[pygame.K_a]:
+            # sock.sendto(MESSAGE, (UDP_IP, UDP_PORT))
+            # server.step([(255, -255, 255, -255),])
+            l = 50
+            r = -50
+        elif keys[pygame.K_d]:
+            # sock.sendto(MESSAGE, (UDP_IP, UDP_PORT))
+            l = -50
+            r = 50
         else:
-            server.step([0,])
-            
+            l = 0
+            r = 0
+            # server.step([(0, 0, 0, 0),])
+        
+        
+        server.step([(l, r, l, r),])
 
         # Update the display
         pygame.display.flip()

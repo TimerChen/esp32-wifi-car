@@ -30,6 +30,7 @@ struct CarState
 {
   /* data */
   uint8_t id, forward, backward, left, right, stop, speed, steer, brake, gear, mode, status, battery, temperature, timestamp, checksum;
+  short motor[4]={};
   // uint8_t x;
   CarState(){
     stop = 1;
@@ -44,12 +45,18 @@ public:
   IPAddress udp_addr;
   int udp_port;
   CarState state;
+  bool simple_mode=false;
+  // 0, 1, 2, 3
+  // reverse 1, 3
+  // uint8_t motor_pin[4][2] = {{27, 13}, {4, 2}, {17, 12}, {15, 14}};
+  const uint8_t motor_pin[4][2] = {{27, 13}, {2, 4}, {17, 12}, {14, 15}};
   WiFiCar(uint8_t id){
     state.id = id;
     // udp_addr = new char[strlen(udpAddress) + 1];
     // strcpy(udp_addr, udpAddress);
     udp_addr.fromString(udpAddress);
     udp_port = udpPort;
+    // WiFiCar(id, udpAddress, udpPort);
   }
   WiFiCar(uint8_t id, const char * udpAddress, const int udpPort){
     state.id = id;
@@ -63,8 +70,13 @@ public:
     udp.endPacket();
   }
   void init(){
-    pinMode(27, OUTPUT);
-    pinMode(13, OUTPUT);
+    // pinMode(27, OUTPUT);
+    // pinMode(13, OUTPUT);
+    for(int mid=0;mid<4;mid++){
+      pinMode(motor_pin[mid][0], OUTPUT);
+      pinMode(motor_pin[mid][1], OUTPUT);
+    }
+
   }
   void join(){
     
@@ -93,6 +105,19 @@ public:
       if(len > 0){
         Serial.println("recv data" + String(data));
         if(data[0] == '[' && data[1] == 'D' && data[2] == 'A' && data[3] == 'T' && data[4] == 'A'){
+          if(simple_mode){
+
+            // update car
+            state.stop = (data[6] == '0');
+            state.forward = (data[6] == '1');
+            state.backward = (data[6] == '2');
+            state.left = (data[6] == '3');
+            state.right = (data[6] == '4');
+          }else{
+            for(int mid=0;mid<4;mid++){
+              state.motor[mid] = ((short*)(data+6))[mid];
+            }
+          }
           // parse data
           // data[5] = id
           // data[6] = x
@@ -110,10 +135,10 @@ public:
           // data[18] = timestamp
           // data[19] = checksum
           // data[20] = '\0'
-          // update car
-          state.forward = (data[6] == '1');
-          state.stop = (data[6] == '0');
+          
         }
+        
+        
       }
     }
     
@@ -124,18 +149,66 @@ public:
     rgb_display_16.show();
   }
   void update_motor(){
-    if(state.stop){
-      // stop motor
-      analogWrite(27, 0);
-      analogWrite(13, 0);
-      rgb_display_16.setPixelColor(0, (((200 & 0xffffff) << 16) | ((50 & 0xffffff) << 8) | 50));
-      return;
+    if(simple_mode){
+      if(state.stop){
+        // stop motor
+        for(int mid=0;mid<4;mid++){
+          analogWrite(motor_pin[mid][0], 0);
+          analogWrite(motor_pin[mid][1], 0);
+        }
+        rgb_display_16.setPixelColor(0, (((200 & 0xffffff) << 16) | ((50 & 0xffffff) << 8) | 50));
+        return;
+      }
+      if(state.forward){
+        // analogWrite(27, 255);
+        // analogWrite(27, 200);
+        // analogWrite(13, 0);
+        for(int mid=0;mid<4;mid++){
+          analogWrite(motor_pin[mid][0], 255);
+          analogWrite(motor_pin[mid][1], 0);
+        }
+        rgb_display_16.setPixelColor(0, (((50 & 0xffffff) << 16) | ((200 & 0xffffff) << 8) | 50));
+      }else if(state.backward){
+        for(int mid=0;mid<4;mid++){
+          analogWrite(motor_pin[mid][0], 0);
+          analogWrite(motor_pin[mid][1], 255);
+        }
+        rgb_display_16.setPixelColor(0, (((50 & 0xffffff) << 16) | ((200 & 0xffffff) << 8) | 50));
+      }else if(state.left){
+        for(int mid=0;mid<4;mid++){
+          analogWrite(motor_pin[mid][(mid % 2)], 255);
+          analogWrite(motor_pin[mid][1 - (mid % 2)], 0);
+        }
+        rgb_display_16.setPixelColor(0, (((50 & 0xffffff) << 16) | ((200 & 0xffffff) << 8) | 50));
+      }else if(state.right){
+        for(int mid=0;mid<4;mid++){
+          analogWrite(motor_pin[mid][1 - (mid % 2)], 255);
+          analogWrite(motor_pin[mid][(mid % 2)], 0);
+        }
+        rgb_display_16.setPixelColor(0, (((50 & 0xffffff) << 16) | ((200 & 0xffffff) << 8) | 50));
+      }
+    }else{
+      bool is_stop=true;
+      // Serial.print("motor: ");
+      for(int mid=0;mid<4;mid++){
+        int m = state.motor[mid];
+        analogWrite(motor_pin[mid][0], max(m, 0));
+        // analogWrite(motor_pin[mid][0], max(state.motor[mid], short(0)));
+        analogWrite(motor_pin[mid][1], max(-m, 0));
+        if(state.motor[mid]!=0){
+          is_stop=false;
+        }
+        // Serial.print(String(m) + String(", "));
+      }
+      // Serial.println("");
+      if(is_stop){
+        rgb_display_16.setPixelColor(0, (((200 & 0xffffff) << 16) | ((50 & 0xffffff) << 8) | 50));
+      }else{
+        rgb_display_16.setPixelColor(0, (((50 & 0xffffff) << 16) | ((200 & 0xffffff) << 8) | 50));
+      }
+      
     }
-    if(state.forward){
-      analogWrite(27, 150);
-      analogWrite(13, 0);
-      rgb_display_16.setPixelColor(0, (((50 & 0xffffff) << 16) | ((200 & 0xffffff) << 8) | 50));
-    }
+    
   }
 }car(0);
 
