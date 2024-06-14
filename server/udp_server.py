@@ -2,6 +2,7 @@ import socket
 import pygame
 import time
 import re
+import numpy as np
 
 # UDP_IP = "127.0.0.1"
 UDP_IP = "0.0.0.0"
@@ -72,14 +73,15 @@ class GameServer():
         return True
 
     def step(self, actions):
-        if actions[0] == -1:
-            # check alive
-            self._check_alive()
-            return
+        # if actions[0] == -1:
+        #     # check alive
+        #     self._check_alive()
+        #     return
 
         for i, act in enumerate(actions):
-            if act != self.last_act[i]:
+            if (act != self.last_act[i]).any():
                 # seed only when state changed
+                print("motor_vec", act)
                 self.last_act[i] = act
                 data = f"[DATA]".encode("utf-8")
                 # for a in act:
@@ -99,19 +101,71 @@ class GameServer():
                 print("send to", self.player_addresses[i], data)
                 self.sock.sendto(data, self.player_addresses[i])
         
-
+def get_vec(k):
+    # if keys[pygame.K_q]:
+    v = 255
+    if k == pygame.K_q:
+        a = -v
+        b = +v
+        # server.step([(a, b, b, a),])
+        motor_vec = (a, b, b, a)
+    # elif keys[pygame.K_e]:
+    elif k == pygame.K_e:
+        a = v
+        b = -v
+        # server.step([(a, b, b, a),])
+        motor_vec = (a, b, b, a)
+    else:
+        # if keys[pygame.K_w]:
+        if k == pygame.K_w:
+            # sock.sendto(MESSAGE, (UDP_IP, UDP_PORT))
+            # server.step([(255, 255, 255, 255),])
+            l, r = v, v
+        # elif keys[pygame.K_s]:
+        elif k == pygame.K_s:
+            # sock.sendto(MESSAGE, (UDP_IP, UDP_PORT))
+            # server.step([(l, r, l, r),])
+            l, r = -v, -v
+        # elif keys[pygame.K_a]:
+        elif k == pygame.K_a:
+            # sock.sendto(MESSAGE, (UDP_IP, UDP_PORT))
+            # server.step([(255, -255, 255, -255),])
+            l = v
+            r = -v
+        # elif keys[pygame.K_d]:
+        elif k == pygame.K_d:
+            # sock.sendto(MESSAGE, (UDP_IP, UDP_PORT))
+            l = -v
+            r = v
+        else:
+            l = 0
+            r = 0
+            # server.step([(0, 0, 0, 0),])
+        
+        motor_vec = (l, r, l, r)
+    
+    return np.array(motor_vec)
 
 if __name__ == '__main__':
-    server = GameServer([0,], (UDP_IP, UDP_PORT))
-
     # Initialize Pygame
     pygame.init()
+    joystick_num = pygame.joystick.get_count()
+    js = None
+    if joystick_num > 0:
+        js = pygame.joystick.Joystick(0)
+        js.init()
+        n_axes = js.get_numaxes()
+        print("has joystick", n_axes)
+        
+    server = GameServer([0,], (UDP_IP, UDP_PORT))
+
 
     # Set up the display
     screen = pygame.display.set_mode((640, 480))
 
     # Main loop
     running = True
+        
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -121,31 +175,21 @@ if __name__ == '__main__':
         time.sleep(0.001)
 
         # Check if 'A' key is pressed
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_w]:
-            # sock.sendto(MESSAGE, (UDP_IP, UDP_PORT))
-            # server.step([(255, 255, 255, 255),])
-            l, r = 255, 255
-        elif keys[pygame.K_s]:
-            # sock.sendto(MESSAGE, (UDP_IP, UDP_PORT))
-            # server.step([(l, r, l, r),])
-            l, r = -255, -255
-        elif keys[pygame.K_a]:
-            # sock.sendto(MESSAGE, (UDP_IP, UDP_PORT))
-            # server.step([(255, -255, 255, -255),])
-            l = 50
-            r = -50
-        elif keys[pygame.K_d]:
-            # sock.sendto(MESSAGE, (UDP_IP, UDP_PORT))
-            l = -50
-            r = 50
+        # joystick
+        if js is not None:
+            pass
         else:
-            l = 0
-            r = 0
-            # server.step([(0, 0, 0, 0),])
-        
-        
-        server.step([(l, r, l, r),])
+            keys = pygame.key.get_pressed()
+            motor_vec = np.array([0, 0, 0, 0])
+            for k in [pygame.K_q, pygame.K_e, pygame.K_w, pygame.K_s, pygame.K_a, pygame.K_d]:
+                if keys[k]:
+                    motor_vec = motor_vec + get_vec(k)
+                    # print("add", k, motor_vec)
+                    # break
+        if np.abs(motor_vec).max() > 0:
+            motor_vec = motor_vec / np.abs(motor_vec).max() * 100
+        motor_vec.astype(np.int32)
+        server.step([motor_vec])
 
         # Update the display
         pygame.display.flip()
